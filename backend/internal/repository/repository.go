@@ -9,7 +9,7 @@ type Repositories struct {
 	User                UserRepository
 	Role                RoleRepository
 	Permission          PermissionRepository
-	Department           DepartmentRepository
+	Department          DepartmentRepository
 	LoginLog            LoginLogRepository
 	OperationLog        OperationLogRepository
 	PermissionChangeLog PermissionChangeLogRepository
@@ -37,8 +37,8 @@ type RoleRepository interface {
 }
 
 type PermissionRepository interface {
-	Create() error
-	Update() error
+	Create(permission *models.Permission) error
+	Update(permission *models.Permission) error
 	Delete(id int64) error
 	GetByID(id int64) (*models.Permission, error)
 	GetByCode(code string) (*models.Permission, error)
@@ -47,8 +47,8 @@ type PermissionRepository interface {
 }
 
 type DepartmentRepository interface {
-	Create() error
-	Update() error
+	Create(department *models.Department) error
+	Update(department *models.Department) error
 	Delete(id int64) error
 	GetByID(id int64) (*models.Department, error)
 	List(page, pageSize int) ([]*models.Department, int64, error)
@@ -56,18 +56,20 @@ type DepartmentRepository interface {
 }
 
 type LoginLogRepository interface {
-	Create() error
+	Create(log *models.LoginLog) error
 	List(page, pageSize int) ([]*models.LoginLog, int64, error)
 }
 
 type OperationLogRepository interface {
-	Create() error
+	Create(log *models.OperationLog) error
 	List(page, pageSize int) ([]*models.OperationLog, int64, error)
 }
 
 type PermissionChangeLogRepository interface {
-	Create() error
+	Create(log *models.PermissionChangeLog) error
 }
+
+// --- User ---
 
 type userRepository struct {
 	db *gorm.DB
@@ -101,7 +103,6 @@ func (r *userRepository) GetByID(id int64) (*models.User, error) {
 func (r *userRepository) GetByUsername(username string) (*models.User, error) {
 	var user models.User
 	err := r.db.Where("username = ?", username).First(&user).Error
-	// Preload associations later when needed
 	if err != nil {
 		return nil, err
 	}
@@ -123,19 +124,18 @@ func (r *userRepository) List(page, pageSize int, keyword string) ([]*models.Use
 }
 
 func (r *userRepository) AssignRoles(userID int64, roleIDs []int64) error {
-	// 删除现有角色
-	if err := r.db.Exec("DELETE FROM user_roles WHERE user_id = ?", userID).Error; err != nil {
+	tx := r.db.Begin()
+	if err := tx.Exec("DELETE FROM user_roles WHERE user_id = ?", userID).Error; err != nil {
+		tx.Rollback()
 		return err
 	}
-
-	// 分配新角色
 	for _, roleID := range roleIDs {
-		if err := r.db.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userID, roleID).Error; err != nil {
+		if err := tx.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userID, roleID).Error; err != nil {
+			tx.Rollback()
 			return err
 		}
 	}
-
-	return nil
+	return tx.Commit().Error
 }
 
 func (r *userRepository) GetPermissions(userID int64) ([]*models.Permission, error) {
@@ -149,6 +149,8 @@ func (r *userRepository) GetPermissions(userID int64) ([]*models.Permission, err
 	`, userID).Scan(&permissions).Error
 	return permissions, err
 }
+
+// --- Role ---
 
 type roleRepository struct {
 	db *gorm.DB
@@ -203,20 +205,21 @@ func (r *roleRepository) List(page, pageSize int, keyword string) ([]*models.Rol
 }
 
 func (r *roleRepository) AssignPermissions(roleID int64, permissionIDs []int64) error {
-	// 删除现有权限
-	if err := r.db.Exec("DELETE FROM role_permissions WHERE role_id = ?", roleID).Error; err != nil {
+	tx := r.db.Begin()
+	if err := tx.Exec("DELETE FROM role_permissions WHERE role_id = ?", roleID).Error; err != nil {
+		tx.Rollback()
 		return err
 	}
-
-	// 分配新权限
 	for _, permissionID := range permissionIDs {
-		if err := r.db.Exec("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", roleID, permissionID).Error; err != nil {
+		if err := tx.Exec("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", roleID, permissionID).Error; err != nil {
+			tx.Rollback()
 			return err
 		}
 	}
-
-	return nil
+	return tx.Commit().Error
 }
+
+// --- Permission ---
 
 type permissionRepository struct {
 	db *gorm.DB
@@ -226,12 +229,12 @@ func NewPermissionRepository(db *gorm.DB) PermissionRepository {
 	return &permissionRepository{db}
 }
 
-func (r *permissionRepository) Create() error {
-	return nil
+func (r *permissionRepository) Create(permission *models.Permission) error {
+	return r.db.Create(permission).Error
 }
 
-func (r *permissionRepository) Update() error {
-	return nil
+func (r *permissionRepository) Update(permission *models.Permission) error {
+	return r.db.Save(permission).Error
 }
 
 func (r *permissionRepository) Delete(id int64) error {
@@ -273,13 +276,15 @@ func (r *permissionRepository) List(page, pageSize int, keyword string) ([]*mode
 func (r *permissionRepository) Tree() ([]*models.Permission, error) {
 	var permissions []*models.Permission
 	err := r.db.Order("sort_order").Find(&permissions).Error
+	if err != nil {
+		return nil, err
+	}
 
-	// 构建树形结构
 	permissionMap := make(map[int64]*models.Permission)
 	var roots []*models.Permission
 
 	for _, perm := range permissions {
-		perm.Children = nil // 清空 children
+		perm.Children = nil
 		permissionMap[perm.ID] = perm
 	}
 
@@ -293,8 +298,10 @@ func (r *permissionRepository) Tree() ([]*models.Permission, error) {
 		}
 	}
 
-	return roots, err
+	return roots, nil
 }
+
+// --- Department ---
 
 type departmentRepository struct {
 	db *gorm.DB
@@ -304,12 +311,12 @@ func NewDepartmentRepository(db *gorm.DB) DepartmentRepository {
 	return &departmentRepository{db}
 }
 
-func (r *departmentRepository) Create() error {
-	return nil
+func (r *departmentRepository) Create(department *models.Department) error {
+	return r.db.Create(department).Error
 }
 
-func (r *departmentRepository) Update() error {
-	return nil
+func (r *departmentRepository) Update(department *models.Department) error {
+	return r.db.Save(department).Error
 }
 
 func (r *departmentRepository) Delete(id int64) error {
@@ -338,13 +345,15 @@ func (r *departmentRepository) List(page, pageSize int) ([]*models.Department, i
 func (r *departmentRepository) Tree() ([]*models.Department, error) {
 	var departments []*models.Department
 	err := r.db.Order("sort_order").Find(&departments).Error
+	if err != nil {
+		return nil, err
+	}
 
-	// 构建树形结构
 	deptMap := make(map[int64]*models.Department)
 	var roots []*models.Department
 
 	for _, dept := range departments {
-		dept.Children = nil // 清空 children
+		dept.Children = nil
 		deptMap[dept.ID] = dept
 	}
 
@@ -358,8 +367,10 @@ func (r *departmentRepository) Tree() ([]*models.Department, error) {
 		}
 	}
 
-	return roots, err
+	return roots, nil
 }
+
+// --- Logs ---
 
 type loginLogRepository struct {
 	db *gorm.DB
@@ -369,8 +380,8 @@ func NewLoginLogRepository(db *gorm.DB) LoginLogRepository {
 	return &loginLogRepository{db}
 }
 
-func (r *loginLogRepository) Create() error {
-	return nil
+func (r *loginLogRepository) Create(log *models.LoginLog) error {
+	return r.db.Create(log).Error
 }
 
 func (r *loginLogRepository) List(page, pageSize int) ([]*models.LoginLog, int64, error) {
@@ -390,8 +401,8 @@ func NewOperationLogRepository(db *gorm.DB) OperationLogRepository {
 	return &operationLogRepository{db}
 }
 
-func (r *operationLogRepository) Create() error {
-	return nil
+func (r *operationLogRepository) Create(log *models.OperationLog) error {
+	return r.db.Create(log).Error
 }
 
 func (r *operationLogRepository) List(page, pageSize int) ([]*models.OperationLog, int64, error) {
@@ -411,8 +422,8 @@ func NewPermissionChangeLogRepository(db *gorm.DB) PermissionChangeLogRepository
 	return &permissionChangeLogRepository{db}
 }
 
-func (r *permissionChangeLogRepository) Create() error {
-	return nil
+func (r *permissionChangeLogRepository) Create(log *models.PermissionChangeLog) error {
+	return r.db.Create(log).Error
 }
 
 func NewRepositories(db *gorm.DB) *Repositories {
@@ -420,7 +431,7 @@ func NewRepositories(db *gorm.DB) *Repositories {
 		User:                NewUserRepository(db),
 		Role:                NewRoleRepository(db),
 		Permission:          NewPermissionRepository(db),
-		Department:           NewDepartmentRepository(db),
+		Department:          NewDepartmentRepository(db),
 		LoginLog:            NewLoginLogRepository(db),
 		OperationLog:        NewOperationLogRepository(db),
 		PermissionChangeLog: NewPermissionChangeLogRepository(db),

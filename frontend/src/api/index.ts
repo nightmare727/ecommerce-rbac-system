@@ -97,7 +97,13 @@ export const permissionApi = {
   tree: () => 
     request.get('/permissions/tree'),
   getById: (id: number) => 
-    request.get(`/permissions/${id}`)
+    request.get(`/permissions/${id}`),
+  create: (data: Partial<Permission>) => 
+    request.post('/permissions', data),
+  update: (id: number, data: Partial<Permission>) => 
+    request.put(`/permissions/${id}`, data),
+  delete: (id: number) => 
+    request.delete(`/permissions/${id}`)
 }
 
 export const departmentApi = {
@@ -106,7 +112,13 @@ export const departmentApi = {
   tree: () => 
     request.get('/departments/tree'),
   getById: (id: number) => 
-    request.get(`/departments/${id}`)
+    request.get(`/departments/${id}`),
+  create: (data: Partial<Department>) => 
+    request.post('/departments', data),
+  update: (id: number, data: Partial<Department>) => 
+    request.put(`/departments/${id}`, data),
+  delete: (id: number) => 
+    request.delete(`/departments/${id}`)
 }
 
 export const loginLogApi = {

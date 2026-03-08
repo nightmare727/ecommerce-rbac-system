@@ -3,12 +3,13 @@ package middleware
 import (
 	"net/http"
 	"strings"
+	"time"
 	"ecommerce-rbac-system/internal/config"
+	"ecommerce-rbac-system/internal/models"
 	"ecommerce-rbac-system/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
-// AuthMiddleware JWT认证中间件
 func AuthMiddleware(authService service.AuthService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -25,7 +26,6 @@ func AuthMiddleware(authService service.AuthService, cfg *config.Config) gin.Han
 			return
 		}
 
-		// 验证token并获取用户
 		user, err := authService.GetUserFromToken(token)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "认证失败"})
@@ -33,7 +33,6 @@ func AuthMiddleware(authService service.AuthService, cfg *config.Config) gin.Han
 			return
 		}
 
-		// 将用户信息存入context
 		c.Set("user", user)
 		c.Set("token", token)
 
@@ -41,26 +40,24 @@ func AuthMiddleware(authService service.AuthService, cfg *config.Config) gin.Han
 	}
 }
 
-// PermissionMiddleware 权限检查中间件
-func PermissionMiddleware(requiredPermission string) gin.HandlerFunc {
+// PermissionMiddleware 通过闭包接收 authService，从 context 取 *models.User
+func PermissionMiddleware(authService service.AuthService, requiredPermission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 从context获取用户和authService
-		user, exists := c.Get("user")
+		userVal, exists := c.Get("user")
 		if !exists {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
 			c.Abort()
 			return
 		}
 
-		authService, exists := c.Get("authService")
-		if !exists {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务错误"})
+		user, ok := userVal.(*models.User)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "用户信息异常"})
 			c.Abort()
 			return
 		}
 
-		// 检查权限
-		hasPermission, err := authService.(service.AuthService).HasPermission(user.(*service.User).ID, requiredPermission)
+		hasPermission, err := authService.HasPermission(user.ID, requiredPermission)
 		if err != nil || !hasPermission {
 			c.JSON(http.StatusForbidden, gin.H{"error": "权限不足"})
 			c.Abort()
@@ -71,34 +68,53 @@ func PermissionMiddleware(requiredPermission string) gin.HandlerFunc {
 	}
 }
 
-// DataScopeMiddleware 数据权限过滤中间件
 func DataScopeMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		user, exists := c.Get("user")
+		userVal, exists := c.Get("user")
 		if !exists {
 			c.Next()
 			return
 		}
 
-		// 从用户的角色中获取数据权限范围
-		// 这里可以添加数据过滤逻辑
-		_ = user
+		user, ok := userVal.(*models.User)
+		if !ok {
+			c.Next()
+			return
+		}
+
+		// 将用户数据权限范围存入 context 供后续使用
+		if len(user.Roles) > 0 {
+			minScope := user.Roles[0].DataScope
+			for _, role := range user.Roles {
+				if role.DataScope < minScope {
+					minScope = role.DataScope
+				}
+			}
+			c.Set("dataScope", minScope)
+		}
+
 		c.Next()
 	}
 }
 
-// OperationLogMiddleware 操作日志中间件
-func OperationLogMiddleware() gin.HandlerFunc {
+func OperationLogMiddleware(logService service.OperationLogService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		startTime := c.GetTime("startTime")
-
-		// 记录操作日志
-		if user, exists := c.Get("user"); exists {
-			_ = user
-			_ = startTime
-			// TODO: 实现日志记录逻辑
-		}
+		startTime := time.Now()
 
 		c.Next()
+
+		if userVal, exists := c.Get("user"); exists {
+			if user, ok := userVal.(*models.User); ok {
+				costTime := time.Since(startTime).Milliseconds()
+				status := 1
+				if c.Writer.Status() >= 400 {
+					status = 0
+				}
+				_ = user
+				_ = costTime
+				_ = status
+				// TODO: 将操作日志写入数据库
+			}
+		}
 	}
 }

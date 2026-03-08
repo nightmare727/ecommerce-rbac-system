@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { authApi, type User } from '@/api'
+import { authApi, userApi, type User } from '@/api'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
 
@@ -20,7 +20,7 @@ export const useUserStore = defineStore('user', () => {
 
       localStorage.setItem('token', res.token)
       localStorage.setItem('user', JSON.stringify(res.user))
-      localStorage.setItem('permissions', JSON.stringify(res.permissions || []))
+      localStorage.setItem('permissions', JSON.stringify(permissions.value))
 
       ElMessage.success('登录成功')
       router.push('/')
@@ -30,10 +30,22 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  const fetchUserInfo = async () => {
+    try {
+      const res: any = await userApi.getInfo()
+      user.value = res.user
+      permissions.value = res.permissions || []
+      localStorage.setItem('user', JSON.stringify(res.user))
+      localStorage.setItem('permissions', JSON.stringify(permissions.value))
+    } catch {
+      logout()
+    }
+  }
+
   const logout = async () => {
     try {
       await authApi.logout()
-    } catch (error) {
+    } catch {
       // 忽略登出错误
     }
     token.value = ''
@@ -60,6 +72,7 @@ export const useUserStore = defineStore('user', () => {
     isLoggedIn,
     login,
     logout,
+    fetchUserInfo,
     hasPermission,
     hasAnyPermission
   }

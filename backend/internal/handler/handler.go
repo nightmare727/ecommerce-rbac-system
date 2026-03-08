@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 type Handlers struct {
@@ -43,14 +44,28 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	permissions, _ := h.authService.GetPermissionCodes(user.ID)
+
 	c.JSON(http.StatusOK, gin.H{
-		"token": token,
-		"user":  user,
+		"token":       token,
+		"user":        user,
+		"permissions": permissions,
 	})
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
+	// logout 现在在认证路由组内，可以从 context 取 token；
+	// 同时兼容直接从 header 解析的方式
 	token := c.GetString("token")
+	if token == "" {
+		authHeader := c.GetHeader("Authorization")
+		token = strings.TrimPrefix(authHeader, "Bearer ")
+	}
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "未提供token"})
+		return
+	}
+
 	if err := h.authService.Logout(token); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -112,9 +127,9 @@ func (h *UserHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":  users,
-		"total": total,
-		"page":  page,
+		"data":     users,
+		"total":    total,
+		"page":     page,
 		"pageSize": pageSize,
 	})
 }
@@ -156,6 +171,9 @@ func (h *UserHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	req.ID = id
 
 	if err := h.userService.Update(&req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -214,9 +232,9 @@ func (h *RoleHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":  roles,
-		"total": total,
-		"page":  page,
+		"data":     roles,
+		"total":    total,
+		"page":     page,
 		"pageSize": pageSize,
 	})
 }
@@ -253,6 +271,9 @@ func (h *RoleHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	req.ID = id
 
 	if err := h.roleService.Update(&req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -311,9 +332,9 @@ func (h *PermissionHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":  permissions,
-		"total": total,
-		"page":  page,
+		"data":     permissions,
+		"total":    total,
+		"page":     page,
 		"pageSize": pageSize,
 	})
 }
@@ -340,19 +361,45 @@ func (h *PermissionHandler) GetByID(c *gin.Context) {
 }
 
 func (h *PermissionHandler) Create(c *gin.Context) {
-	// 实现创建权限
+	var req models.Permission
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.permissionService.Create(&req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "创建成功"})
 }
 
 func (h *PermissionHandler) Update(c *gin.Context) {
-	// 实现更新权限
+	var req models.Permission
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	req.ID = id
+
+	if err := h.permissionService.Update(&req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "更新成功"})
 }
 
 func (h *PermissionHandler) Delete(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	// 删除权限的实现
-	_ = id
+	if err := h.permissionService.Delete(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
@@ -375,9 +422,9 @@ func (h *DepartmentHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":  departments,
-		"total": total,
-		"page":  page,
+		"data":     departments,
+		"total":    total,
+		"page":     page,
 		"pageSize": pageSize,
 	})
 }
@@ -404,18 +451,45 @@ func (h *DepartmentHandler) GetByID(c *gin.Context) {
 }
 
 func (h *DepartmentHandler) Create(c *gin.Context) {
-	// 实现创建部门
+	var req models.Department
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.departmentService.Create(&req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "创建成功"})
 }
 
 func (h *DepartmentHandler) Update(c *gin.Context) {
-	// 实现更新部门
+	var req models.Department
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	req.ID = id
+
+	if err := h.departmentService.Update(&req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "更新成功"})
 }
 
 func (h *DepartmentHandler) Delete(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	_ = id
+	if err := h.departmentService.Delete(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
@@ -438,9 +512,9 @@ func (h *LoginLogHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":  logs,
-		"total": total,
-		"page":  page,
+		"data":     logs,
+		"total":    total,
+		"page":     page,
 		"pageSize": pageSize,
 	})
 }
@@ -464,9 +538,9 @@ func (h *OperationLogHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":  logs,
-		"total": total,
-		"page":  page,
+		"data":     logs,
+		"total":    total,
+		"page":     page,
 		"pageSize": pageSize,
 	})
 }

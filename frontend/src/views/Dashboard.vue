@@ -76,4 +76,4 @@ onMounted(async () => {
 .stat-card {
   margin-bottom: 20px;
 }
-</:deep/>
+</style>

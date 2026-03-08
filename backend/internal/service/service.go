@@ -42,12 +42,18 @@ type RoleService interface {
 }
 
 type PermissionService interface {
+	Create(permission *models.Permission) error
+	Update(permission *models.Permission) error
+	Delete(id int64) error
 	GetByID(id int64) (*models.Permission, error)
 	List(page, pageSize int, keyword string) ([]*models.Permission, int64, error)
 	Tree() ([]*models.Permission, error)
 }
 
 type DepartmentService interface {
+	Create(department *models.Department) error
+	Update(department *models.Department) error
+	Delete(id int64) error
 	GetByID(id int64) (*models.Department, error)
 	List(page, pageSize int) ([]*models.Department, int64, error)
 	Tree() ([]*models.Department, error)
@@ -157,6 +163,18 @@ func NewPermissionService(repo repository.PermissionRepository) PermissionServic
 	return &permissionService{repo}
 }
 
+func (s *permissionService) Create(permission *models.Permission) error {
+	return s.repo.Create(permission)
+}
+
+func (s *permissionService) Update(permission *models.Permission) error {
+	return s.repo.Update(permission)
+}
+
+func (s *permissionService) Delete(id int64) error {
+	return s.repo.Delete(id)
+}
+
 func (s *permissionService) GetByID(id int64) (*models.Permission, error) {
 	return s.repo.GetByID(id)
 }
@@ -175,6 +193,18 @@ type departmentService struct {
 
 func NewDepartmentService(repo repository.DepartmentRepository) DepartmentService {
 	return &departmentService{repo}
+}
+
+func (s *departmentService) Create(department *models.Department) error {
+	return s.repo.Create(department)
+}
+
+func (s *departmentService) Update(department *models.Department) error {
+	return s.repo.Update(department)
+}
+
+func (s *departmentService) Delete(id int64) error {
+	return s.repo.Delete(id)
 }
 
 func (s *departmentService) GetByID(id int64) (*models.Department, error) {
@@ -321,7 +351,7 @@ func (s *authService) HasPermission(userID int64, permissionCode string) (bool, 
 
 func (s *authService) GetPermissionCodes(userID int64) ([]string, error) {
 	perms, err := s.userRepo.GetPermissions(userID)
-	if err err != nil {
+	if err != nil {
 		return nil, err
 	}
 
