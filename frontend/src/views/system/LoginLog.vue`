@@ -1,0 +1,12 @@
+<template>
+  <el-card>
+    <template #header>
+      <span>登录日志</span>
+    </template>
+    <p>登录日志功能开发中...</p>
+  </el-card>
+</template>
+
+<script setup lang="ts">
+// 登录日志页面
+</script>
